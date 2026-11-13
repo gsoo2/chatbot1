@@ -3,6 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "description": "사진을 찍어야 대화방이 열리는 그룹챗",
-  "scripts": { "start": "node --disable-warning=ExperimentalWarning server.js", "test": "node --disable-warning=ExperimentalWarning test.js" },
-  "engines": { "node": ">=22.5" }
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning server.js",
+    "test": "node --disable-warning=ExperimentalWarning test.js"
+  },
+  "engines": {
+    "node": ">=22.5"
+  },
+  "dependencies": {
+    "pg": "^8.23.1"
+  }
 }

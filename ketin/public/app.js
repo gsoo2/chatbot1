@@ -49,12 +49,16 @@ async function act(btn, fn) {
 }
 
 /* ── 시작하기 ── */
-function onboard() {
+const G_ICON = '<b class="gg" aria-hidden="true">G</b>';
+async function onboard() {
+  const cfg = await api('/config').catch(() => ({}));
   const el = document.createElement('div'); el.className = 'screen onboard pad';
   el.innerHTML = `<div class="word">ketin</div>
     <p>하루에 한 번, 사진을 찍어야<br>친구들의 대화방이 열려요.</p>
+    ${cfg.google ? `<a class="btn solid wide press gbtn" href="/auth/google">${G_ICON}Google로 시작하기</a><div class="or">또는 이름만 정하고 시작</div>` : ''}
     <form style="display:flex;flex-direction:column;gap:18px"><input class="field" id="obName" maxlength="10" placeholder="이름" autocomplete="off">
-    <button class="btn solid wide press">시작하기</button></form>`;
+    <button class="btn ${cfg.google ? '' : 'solid'} wide press">${cfg.google ? '게스트로 시작하기' : '시작하기'}</button></form>
+    <a class="note" href="/privacy">개인정보처리방침</a>`;
   app.insertBefore(el, $('#splash'));
   $('form', el).onsubmit = (e) => {
     e.preventDefault();
@@ -167,13 +171,47 @@ function newOpen() {
   });
 }
 function profile() {
-  formSheet(`<h2>내 프로필</h2>
-    <input class="field" id="myName" maxlength="10" value="${esc(H.me.name)}" autocomplete="off" aria-label="이름">
-    <div class="stats"><div><b>${H.me.streak}</b><span>연속 일수</span></div><div><b>${H.groups.length}</b><span>그룹</span></div><div><b>${H.opens.filter((o) => o.joined).length}</b><span>오픈채팅</span></div></div>
-    <p>계정은 이 기기의 브라우저에 묶여 있어요.</p>`, async (s, close) => {
-    const name = $('#myName', s).value.trim(); if (!name) return toast('이름을 적어 주세요');
-    if (name !== H.me.name) await api('/me', { name });
-    close(); refreshHome();
+  const me = H.me; let armed = false;
+  sheet(`<h2>내 프로필</h2>
+    <input class="field" id="myName" maxlength="10" value="${esc(me.name)}" autocomplete="off" aria-label="이름">
+    <div class="stats"><div><b>${me.streak}</b><span>연속 일수</span></div><div><b>${H.groups.length}</b><span>그룹</span></div><div><b>${H.opens.filter((o) => o.joined).length}</b><span>오픈채팅</span></div></div>
+    <button class="btn solid wide press" id="ok">이름 저장</button>
+    ${me.google ? `<p>Google 계정에 연결됨${me.email ? ' · ' + esc(me.email) : ''}</p>`
+      : H.config.google ? `<a class="btn wide press gbtn" href="/auth/google">${G_ICON}Google 계정 연결하기</a><p>연결하면 다른 기기에서도 같은 계정으로 들어올 수 있어요.</p>`
+      : '<p>지금은 게스트 계정이에요. 이 기기의 브라우저에 묶여 있어요.</p>'}
+    <div class="two"><button class="btn press" id="ask">문의하기</button>${me.gm ? '<a class="btn press" href="/admin">관리자 페이지</a>' : '<button class="btn press" id="gm">GM 코드</button>'}</div>
+    <button class="btn wide press" id="out">로그아웃</button>
+    <a class="note" href="/privacy">개인정보처리방침</a>`, (s, close) => {
+    $('#ok', s).onclick = (e) => act(e.target, async () => {
+      const name = $('#myName', s).value.trim(); if (!name) return toast('이름을 적어 주세요');
+      if (name !== me.name) await api('/me', { name });
+      close(); refreshHome();
+    });
+    $('#ask', s).onclick = () => { close(); setTimeout(inquiry, 300); };
+    if ($('#gm', s)) $('#gm', s).onclick = () => { close(); setTimeout(gmLogin, 300); };
+    $('#out', s).onclick = (e) => {
+      if (!armed) { armed = true; e.target.textContent = me.google ? '한 번 더 누르면 로그아웃돼요' : '게스트 계정은 되찾을 수 없어요. 한 번 더 누르면 로그아웃'; return; }
+      act(e.target, async () => { await api('/logout', {}); location.reload(); });
+    };
+  });
+}
+function gmLogin() {
+  formSheet('<h2>GM 코드</h2><p>운영자만 아는 코드를 입력하세요. 여러 번 틀리면 15분 동안 잠겨요.</p><input class="field" id="gmCode" type="password" maxlength="80" placeholder="코드" autocomplete="off">', async (s, close) => {
+    const code = $('#gmCode', s).value.trim(); if (!code) return;
+    await api('/gm', { code }); close(); toast('운영자로 로그인했어요'); refreshHome();
+  });
+}
+async function inquiry() {
+  const { list } = await api('/inquiries').catch(() => ({ list: [] }));
+  sheet(`<h2>문의하기</h2><p>불편한 점, 신고, 광고 문의를 보내 주세요. 답변은 여기에 표시돼요.</p>
+    <textarea class="area" id="qText" maxlength="1000" rows="4" placeholder="내용을 적어 주세요"></textarea>
+    <button class="btn solid wide press" id="ok">보내기</button>
+    ${list.length ? `<div class="label"><span>내 문의</span><span>${list.length}</span></div>
+    <div class="qlist">${list.map((q) => `<div class="q"><time>${new Date(q.created).toLocaleDateString('ko-KR')}</time><div>${esc(q.text)}</div>${q.reply ? `<div class="a"><b>답변</b> ${esc(q.reply)}</div>` : '<small>답변을 기다리는 중</small>'}</div>`).join('')}</div>` : ''}`, (s, close) => {
+    $('#ok', s).onclick = (e) => act(e.target, async () => {
+      const text = $('#qText', s).value.trim(); if (text.length < 5) return toast('내용을 조금 더 적어 주세요');
+      await api('/inquiries', { text }); close(); toast('문의를 보냈어요');
+    });
   });
 }
 
@@ -271,7 +309,13 @@ async function sendText(text) {
   catch (e) { toast(e.message); if (e.status === 423) refreshRoom(); }
 }
 function onRoomClick(e) {
-  const a = e.target.closest('[data-act]'); if (!a) return;
+  const a = e.target.closest('[data-act]');
+  if (!a) {
+    const row = e.target.closest('.bubble') && e.target.closest('.row[data-id]');
+    if (row && H.me.gm && cur.type === 'o') sheet('<h2>이 메시지를 지울까요?</h2><p>오픈채팅의 모든 사람에게서 사라져요.</p><button class="btn solid wide press" id="ok">메시지 삭제</button>',
+      (s, close) => { $('#ok', s).onclick = (ev) => act(ev.target, async () => { await api('/messages/' + row.dataset.id + '/delete', {}); close(); }); });
+    return;
+  }
   const k = a.dataset.act;
   if (k === 'back') closeRoom();
   else if (k === 'invite') invite();
@@ -325,6 +369,8 @@ function connect() {
   es.onopen = () => { if (opened) { refreshHome(); refreshRoom(); } opened = true; }; // 끊겼다 붙으면 놓친 것을 다시 받는다
   es.onmessage = (e) => {
     const ev = JSON.parse(e.data), here = cur && cur.key === ev.room;
+    if (ev.type === 'inquiry') return toast('문의에 답변이 왔어요');
+    if (ev.type === 'del') { const old = here && $(`.msgs [data-id="${ev.msg.id}"]`, cur.el); if (old) old.outerHTML = msgHTML(ev.msg); return; }
     if (!here) return refreshHome();
     if (ev.type === 'msg' && (cur.type === 'o' || cur.d.unlocked)) appendMsg(cur, ev.msg);
     if (ev.type === 'hidden' || ev.shot || ev.members) refreshRoom();
