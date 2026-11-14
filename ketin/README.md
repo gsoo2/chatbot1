@@ -20,7 +20,48 @@ npm test         # 잠금, 로그인, 보안 규칙 확인
 | `PUBLIC_ORIGIN` | 서비스 주소 (`https://…`). Render에서는 자동으로 잡힌다 | 요청의 호스트를 쓴다 |
 | `PORT`, `DATA_DIR` | 포트, 로컬 저장 폴더 | 3000, `./data` |
 
-## 무료로 배포하기 (Render + Neon)
+## 정식 배포: Oracle Cloud 무료 서버 + DuckDNS 무료 주소 (권장)
+
+Oracle Cloud "Always Free" 는 기간 제한 없이 서버(ARM 최대 4코어·24GB 메모리)와 디스크 200GB 를 줍니다.
+디스크가 그대로 남기 때문에 별도 DB 없이 사진과 대화가 서버에 저장되고, 서버가 잠들지 않습니다.
+
+**1. 주소 만들기 (DuckDNS)**
+1. https://www.duckdns.org 에 구글 계정으로 로그인합니다.
+2. 원하는 이름을 넣고 add domain → `이름.duckdns.org` 가 생깁니다. 화면 위쪽의 **token** 을 복사해 둡니다.
+
+**2. 서버 만들기 (Oracle Cloud)**
+1. https://www.oracle.com/kr/cloud/free/ 에서 가입합니다. 본인 확인용 카드가 필요하지만 Always Free 자원만 쓰면 결제되지 않습니다. 홈 리전은 **서울** 또는 **춘천**.
+2. 콘솔 → Compute → Instances → Create instance
+   - Image: **Ubuntu 24.04**
+   - Shape: **VM.Standard.A1.Flex** (1 OCPU / 6GB 면 충분). "Out of capacity" 가 뜨면 **VM.Standard.E2.1.Micro** 로 만들어도 됩니다.
+   - "Assign a public IPv4 address" 켜기, SSH 키는 "Generate a key pair" 로 받아 저장합니다.
+3. 만든 인스턴스 → Subnet → Security List → Add Ingress Rules 로 두 줄을 추가합니다.
+   - Source `0.0.0.0/0`, TCP, Destination port `80`
+   - Source `0.0.0.0/0`, TCP, Destination port `443`
+
+**3. 설치 (서버에서 명령 두 줄)**
+
+인스턴스 화면의 공인 IP 로 접속합니다: `ssh -i 받은키.key ubuntu@공인IP`
+
+```bash
+git clone -b claude/ketin-app-development-d9hrtj https://github.com/gsoo2/chatbot1.git
+sudo bash chatbot1/ketin/deploy/install.sh 이름.duckdns.org DuckDNS토큰
+```
+
+끝나면 `https://이름.duckdns.org` 로 접속됩니다. 스크립트가 하는 일:
+Node 22 · Caddy(HTTPS 인증서 자동 발급/갱신) 설치, 전용 계정으로 격리된 systemd 서비스 등록(죽으면 자동 재시작),
+방화벽 80/443 개방, DuckDNS 주소를 이 서버 IP 에 연결(5분마다 갱신), 매일 새벽 DB 백업(14일 보관), GM 코드 생성.
+
+- GM 코드 보기: `sudo grep GM_CODE /etc/ketin.env`
+- 구글 로그인 켜기: Google Cloud Console 에서 OAuth 클라이언트(웹)를 만들고 리디렉션 URI 에 `https://이름.duckdns.org/auth/google/callback` 등록 →
+  `sudo nano /etc/ketin.env` 에서 `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` 줄을 채우고 `sudo systemctl restart ketin`
+- 업데이트: `cd chatbot1 && git pull && sudo bash ketin/deploy/install.sh`
+- 로그: `sudo journalctl -u ketin -f`
+- 데이터 위치: `/var/lib/ketin` (DB + 사진), 백업: `/var/backups/ketin`
+
+다른 무료 주소를 쓰고 싶다면 도메인의 A 레코드를 서버 IP 로 맞춘 뒤 토큰 없이 `install.sh 내도메인` 만 실행하면 됩니다.
+
+## 다른 방법: Render + Neon
 
 비밀 값은 저장소나 채팅에 적지 말고 Render의 Environment 화면에만 넣는다.
 

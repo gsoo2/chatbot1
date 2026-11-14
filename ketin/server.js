@@ -8,6 +8,7 @@ const { DatabaseSync } = require('node:sqlite');
 const store = require('./store');
 
 const PORT = process.env.PORT || 3000;
+const HOST = process.env.HOST || '0.0.0.0';
 const DATA = process.env.DATA_DIR || path.join(__dirname, 'data');
 const PUBLIC = path.join(__dirname, 'public');
 const PHOTOS = path.join(DATA, 'photos');
@@ -495,7 +496,7 @@ async function handle(req, res) {
   openDb();
   const server = http.createServer(handle);
   server.requestTimeout = 30e3; server.headersTimeout = 15e3; server.maxHeadersCount = 60;
-  server.listen(PORT, () => {
+  server.listen(PORT, HOST, () => {
     console.log(`ketin  ${ORIGIN || 'http://localhost:' + PORT}`);
     console.log(`저장: ${remote ? 'Postgres에 보관' : '이 서버의 디스크 (' + DATA + ')'} · 구글 로그인: ${GOOGLE_ON ? '켜짐' : '꺼짐'}`);
     if (!process.env.GM_CODE && !process.env.ADMIN_KEY) console.log(`GM 코드: ${GM_CODE}  (환경변수 GM_CODE 로 직접 정할 수 있어요)`);
